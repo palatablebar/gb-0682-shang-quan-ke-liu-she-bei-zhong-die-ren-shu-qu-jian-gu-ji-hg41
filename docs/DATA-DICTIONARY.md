@@ -13,3 +13,7 @@ CSV按UTF-8 BOM、UTF-8、GB18030回退，保留逻辑记录结束行号；引�
 三方交集仅在A、B、C三个区域齐全时适用，类型triple的left必须为ABC，right必须为空。
 
 支持区域固定为A、B、C；其他区域标识拒绝，防止三方ABC记录关联到另一组区域。
+
+## 留存与证据
+
+原始CSV整表与运行态`source_b64`留存7天，到期由`store.purge_raw`删除；正式区间证据包留存365天，存放于证据库（`EVIDENCE_VAULT_PATH`，默认`data/vault`）。证据包不含原始整表：全部原始数据行仅以Merkle根承诺，被采纳观测逐行附带叶哈希与包含证明；版本取舍只记候选行号、版本、叶哈希与原因码（SELECTED/VERSION_SUPERSEDED/CONFLICT）；隔离记录只留行号、ID、原因码与叶哈希。每个区间的交集推导（T的max/min各项与联合公式）随包保存，清理后仅凭证据包即可重算复核，详见`docs/RETENTION.md`。

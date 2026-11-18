@@ -6,7 +6,7 @@ def test_all_module_pages(client):
     for mod,_ in MODULES:assert client.get('/'+mod).status_code==200
 def test_run_and_export(client):
     r=client.post('/api/runs',json={'sample':'dirty.csv'});assert r.status_code==200
-    s=r.get_json();e=client.get('/api/archive/'+s['run_id']+'/export.csv');assert e.status_code==200 and '运行清单' in e.data.decode('utf-8-sig')
+    s=r.get_json();e=client.get('/api/archive/'+s['run_id']+'/export.csv');assert e.status_code==200 and '封存清单' in e.data.decode('utf-8-sig')
 def test_idempotent_api(client):
     a=client.post('/api/runs',json={}).get_json();b=client.post('/api/runs',json={}).get_json()
     assert a['run_id']==b['run_id'] and len(client.get('/api/runs').get_json())==1

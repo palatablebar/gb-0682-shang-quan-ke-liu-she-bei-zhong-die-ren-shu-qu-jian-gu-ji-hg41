@@ -5,7 +5,8 @@ from app.errors import DomainError
 from app.workflow import run,load
 from app import store
 from app.web import payload
-from app.modules.m7_archive.export_out import bundle
+from app.modules.m7_archive.export_out import sealed_bundle
+from app.modules.m7_archive.service import seal_run
 
 def create_app():
     app=Flask(__name__);app.config['MAX_CONTENT_LENGTH']=2_000_000
@@ -20,7 +21,11 @@ def create_app():
     def health():return jsonify(status='ok')
     @app.post('/api/runs')
     def submit():
-        content,params=payload();state=run(content,params);return jsonify(store.save(state['run_id'],state))
+        content,params=payload();state=run(content,params)
+        # 提交即封存：同批重跑由 vault 保证幂等，不重复生成证据。
+        if state.get('reconcile',{}).get('balanced'):
+            seal_run(state)
+        return jsonify(store.save(state['run_id'],state))
     @app.get('/api/runs')
     def list_runs():return jsonify(store.history())
     @app.get('/api/runs/<run_id>')
@@ -32,12 +37,16 @@ def create_app():
         return jsonify(store.review(run_id,data['version'],data.get('decision')))
     @app.get('/api/archive/<run_id>/export.csv')
     def download(run_id):
+        # 导出与归档页同一份材料：只从证据库封存包生成。
         state=store.get(run_id)
         if not state.get('reconcile',{}).get('balanced'):raise DomainError('UNBALANCED','对账未平')
-        return Response(bundle(state),mimetype='text/csv; charset=utf-8',headers={'Content-Disposition':'attachment; filename=evidence.csv'})
+        return Response(sealed_bundle(run_id),mimetype='text/csv; charset=utf-8',headers={'Content-Disposition':'attachment; filename=evidence.csv'})
     with app.app_context():
         if not store.history():
-            state=run(load('dirty.csv'),{});store.save(state['run_id'],state)
+            state=run(load('dirty.csv'),{})
+            if state.get('reconcile',{}).get('balanced'):
+                seal_run(state)
+            store.save(state['run_id'],state)
     return app
 
 app=create_app()

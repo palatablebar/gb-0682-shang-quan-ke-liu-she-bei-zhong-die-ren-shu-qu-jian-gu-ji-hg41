@@ -12,7 +12,7 @@
 | M4 重叠约束 | 查看并复算重叠约束 | `/api/m4_segments` | `app/modules/m4_segments/rules.py` | `tests/test_segments.py` |
 | M5 人数估界 | 查看并复算人数估界 | `/api/m5_calculate` | `app/modules/m5_calculate/rules.py` | `tests/test_calculate.py` |
 | M6 日汇对账 | 查看并复算日汇对账 | `/api/m6_reconcile` | `app/modules/m6_reconcile/compare.py` | `tests/test_reconcile.py` |
-| M7 报告归档 | 查看并复算报告归档 | `/api/m7_archive` | `app/modules/m7_archive/export_out.py` | `tests/test_archive.py` |
+| M7 报告归档 | 查看并复算报告归档 | `/api/m7_archive` | `app/modules/m7_archive/export_out.py`、`vault.py`、`evidence.py` | `tests/test_archive.py`、`tests/test_evidence_retention.py` |
 
 ## 陷阱登记
 
@@ -31,6 +31,10 @@
 | TRAP-26 | 旧版本复核 | 覆盖新结论 | 事务条件更新 | `app/store.py` | `tests/test_archive.py::test_stale_review` |
 | TRAP-11 | 时区混用 | 同刻不同桶 | UTC归整 | `app/modules/m2_mapping/coerce.py` | `tests/test_versions.py::test_same_instant` |
 | TRAP-19 | 三方约束矛盾 | 输出伪精确数 | 非负原子区域可行检查 | `app/modules/m5_calculate/rules.py` | `tests/test_calculate.py::test_three_way_contradiction` |
+| TRAP-30 | 整表长期留存违规 | 证据包夹带原始表 | 只留 Merkle 根+采纳行包含证明，7 天清理整表 | `app/modules/m7_archive/evidence.py`、`app/store.py` | `tests/test_evidence_retention.py::test_pack_contains_no_whole_table_but_keeps_merkle_root` |
+| TRAP-31 | 同批重跑重复造证据 | 每次封存生成新包 | run_id 去重 + 内容寻址，已封存原样返回 | `app/modules/m7_archive/vault.py` | `tests/test_evidence_retention.py::test_seal_is_idempotent_same_batch` |
+| TRAP-32 | 留存切换失败丢档案 | 直接覆盖登记 | 临时文件+原子重命名，失败回滚并写日志 | `app/modules/m7_archive/vault.py` | `tests/test_evidence_retention.py::test_switch_failure_keeps_previous_archive_verifiable` |
+| TRAP-33 | 页面与导出材料不一致 | 各自拼装运行态 | 统一从证据库封存包读取，未封存拒绝导出 | `app/modules/m7_archive/handler.py`、`export_out.py` | `tests/test_evidence_retention.py::test_archive_page_and_export_use_same_pack` |
 
 ## 对账规则
 

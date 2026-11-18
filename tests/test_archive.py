@@ -1,14 +1,13 @@
 import csv,io
 from app import store
 from app.modules.m7_archive.export_out import bundle,checksum
-from app.workflow import load,run
 from app.errors import DomainError
 import pytest
 
 def test_export_rows(state):
-    rows=list(csv.reader(io.StringIO(bundle(state).lstrip('\ufeff'))));assert rows[0][0]=='记录类型' and rows[1][0]=='运行清单'
+    rows=list(csv.reader(io.StringIO(bundle(state).lstrip('\ufeff'))));assert rows[0][0]=='记录类型' and rows[1][0]=='封存清单'
 def test_export_quarantine(state):
-    assert bundle(state).count('隔离')==len(state['quarantine'])
+    assert bundle(state).count('隔离摘要')==len(state['quarantine'])
 def test_checksum_stable(state):
     assert checksum(state)==state['archive']['sha256'] and len(checksum(state))==64
 def test_archive_ready(state):

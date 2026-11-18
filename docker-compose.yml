@@ -6,6 +6,7 @@ services:
       - "${PORT:-18251}:8000"
     environment:
       DB_PATH: /data/records.db
+      EVIDENCE_VAULT_PATH: /data/vault
       TZ: Asia/Shanghai
     volumes:
       - records:/data

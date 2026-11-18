@@ -1,1 +1,93 @@
-{% extends "base.html" %}{% block content %}<div class="dashboard"><section class="panel observations"><div class="panel-head"><h2>观测归档</h2><span>{{history|length}} 批</span></div><div class="table-wrap"><table><thead><tr><th>批次</th><th>复核版本</th><th>状态</th></tr></thead><tbody>{% for h in history %}<tr><td>{{h.id}}</td><td>{{h.version}}</td><td>{{h.decision}}</td></tr>{% endfor %}</tbody></table></div><div class="action-row"><a href="/api/archive/{{run.run_id}}/export.csv" class="filled link-button">保存区间证据</a><button id="approve" data-id="{{run.run_id}}" data-rev="{{run.review_version}}">复核通过</button><button id="print-report">打印</button></div></section><section class="panel controls"><div class="panel-head"><h2>证据指纹</h2></div><p class="hash">{{data.archive.sha256}}</p><div class="status-grid"><div><b>{{data.archive.evidence_count}}</b><span>证据条目</span></div></div></section>{% include "rejected.html" %}</div>{% endblock %}
+{% extends "base.html" %}{% block content %}
+<div class="dashboard">
+  <section class="panel observations">
+    <div class="panel-head"><h2>封存证据登记</h2><span>{{registry.seals|length}} 份 · 链 {{'完整' if registry.chain_intact else '断裂'}}</span></div>
+    <div class="table-wrap"><table>
+      <thead><tr><th>批次</th><th>证据指纹</th><th>原始清理</th><th>原始到期</th><th>证据到期</th></tr></thead>
+      <tbody>
+      {% for s in registry.seals %}
+        <tr>
+          <td><a href="/api/archive/{{s.run_id}}/pack">{{s.run_id}}</a></td>
+          <td class="hash-cell" title="{{s.pack_hash}}">{{s.pack_hash[:12]}}…</td>
+          <td>{{'已清理' if s.raw_purged else '留存中'}}</td>
+          <td>{{s.raw_expires_at[:10]}}</td>
+          <td>{{s.evidence_expires_at[:10]}}</td>
+        </tr>
+      {% else %}<tr><td colspan="5">尚未封存任何批次</td></tr>{% endfor %}
+      </tbody>
+    </table></div>
+    <div class="action-row">
+      {% if pack %}
+      <a href="/api/archive/{{run.run_id}}/export.csv" class="filled link-button">导出封存证据(CSV)</a>
+      <a href="/api/archive/{{run.run_id}}/verify" class="link-button">独立复核</a>
+      <form method="post" action="/api/archive/{{run.run_id}}/purge-raw"><button type="submit" class="link-button">模拟7天清理原始表</button></form>
+      {% else %}
+      <form method="post" action="/api/archive/{{run.run_id}}/seal"><button type="submit" class="filled link-button">封存当前批次证据</button></form>
+      {% endif %}
+      <button id="print-report">打印</button>
+    </div>
+  </section>
+
+  {% if pack %}
+  <section class="panel controls">
+    <div class="panel-head"><h2>证据包 {{pack.schema_version}}</h2><span>留存策略 原始{{pack.retention.raw_records_days}}天 / 证据{{pack.retention.evidence_days}}天</span></div>
+    <p class="hash">{{pack.pack_hash}}</p>
+    <div class="status-grid">
+      <div><b>{{pack.merkle.leaf_count}}</b><span>整表Merkle叶(仅留根)</span></div>
+      <div><b>{{pack.intervals|length}}</b><span>正式区间</span></div>
+      <div><b>{{pack.version_decisions|length}}</b><span>版本取舍组</span></div>
+      <div><b>{{'通过' if verify_report and verify_report.ok else '异常'}}</b><span>清理后复核</span></div>
+    </div>
+    <p class="hash small">Merkle 根：{{pack.merkle.root}}</p>
+    <p class="hash small">前包哈希：{{pack.prev_pack_hash or '（链首）'}}</p>
+  </section>
+
+  <section class="panel observations">
+    <div class="panel-head"><h2>正式区间 → 采纳观测 / 交集依据</h2><span>每个区间可逐行追溯</span></div>
+    <div class="table-wrap"><table>
+      <thead><tr><th>时间桶</th><th>正式区间</th><th>重算区间</th><th>交集推导</th><th>采纳观测(行号/版本/叶)</th><th>Merkle证明</th></tr></thead>
+      <tbody>
+      {% for b in pack.intervals %}
+        <tr>
+          <td>{{b.bucket}}</td>
+          <td>[{{b.official_interval.lower}}, {{b.official_interval.upper}}]<br><small>{{b.official_interval.code}}</small></td>
+          <td>[{{b.recomputed_interval.lower}}, {{b.recomputed_interval.upper}}]</td>
+          <td><small>
+            公式：{{b.intersection_basis.formula}}<br>
+            T下界项={{b.intersection_basis.triple_lower_terms or '—'}}<br>
+            T上界项={{b.intersection_basis.triple_upper_terms or '—'}}<br>
+            base={{b.intersection_basis.base if b.intersection_basis.base is defined else '—'}}
+          </small></td>
+          <td><small>{% for o in b.adopted_observations %}行{{o.line}} {{o.id}} v{{o.version}} {{o.kind}} {{o.left}}{{o.right}}={{o.count}}{{o.unit}}<br>叶 {{o.leaf[:10]}}…<br>{% endfor %}</small></td>
+          <td><small>{{b.adopted_observations[0].merkle_proof|length}} 步包含证明 ✓</small></td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table></div>
+  </section>
+
+  <section class="panel observations">
+    <div class="panel-head"><h2>版本取舍</h2><span>被取代版本只留行号/版本/叶哈希/原因码</span></div>
+    <div class="table-wrap"><table>
+      <thead><tr><th>观测键</th><th>候选行</th><th>版本</th><th>结论</th><th>原因码</th></tr></thead>
+      <tbody>
+      {% for d in pack.version_decisions %}{% for c in d.candidates %}
+        <tr><td>{{d.key|join('|')}}</td><td>{{c.line}} ({{c.id}})</td><td>v{{c.version}}</td>
+          <td>{{'采纳' if c.selected else '未采纳'}}</td><td>{{c.reason}}</td></tr>
+      {% endfor %}{% endfor %}
+      </tbody>
+    </table></div>
+  </section>
+  {% else %}
+  <section class="panel controls">
+    <div class="panel-head"><h2>运行态预览（未封存）</h2></div>
+    <p class="hash small">当前展示的是流水线实时结果；封存后本页与导出将共用证据库中的同一份材料。</p>
+    <div class="status-grid">
+      <div><b>{{data.input_count if data.input_count is defined else '—'}}</b><span>输入记录</span></div>
+      <div><b>{{data.quarantine|length if data.quarantine else 0}}</b><span>隔离记录</span></div>
+    </div>
+  </section>
+  {% endif %}
+  {% include "rejected.html" %}
+</div>
+{% endblock %}
